@@ -17,7 +17,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getSoundCloudTrack: (trackId) => ipcRenderer.invoke('get-soundcloud-track', trackId),
 
     // Получение трека по URL
-    getSoundCloudFromUrl: (url) => ipcRenderer.invoke('get-soundcloud-from-url', url)
+    getSoundCloudFromUrl: (url) => ipcRenderer.invoke('get-soundcloud-from-url', url),
+
+    // === ITUNES ===
+    searchITunes: (query) => ipcRenderer.invoke('search-itunes', query)
 });
 
 console.log('Preload script loaded successfully');

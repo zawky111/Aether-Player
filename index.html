@@ -124,9 +124,102 @@
             border: 1px solid var(--glass-border); border-radius: 30px; padding: 20px;
             overflow: hidden; opacity: 0; pointer-events: none;
             transform: translateX(-30px); transition: 0.4s ease;
-            display: flex; flex-direction: column; height: 100%;
+            display: flex; flex-direction: column; height: 100%; gap: 15px;
         }
         .app-container.playlist-open .playlist-panel { opacity: 1; pointer-events: all; transform: translateX(0); }
+
+        .search-panel {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 20px;
+            padding: 15px;
+        }
+
+        .search-form {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.4);
+            color: var(--text-main);
+            outline: none;
+            font-size: 0.9rem;
+        }
+
+        .search-input::placeholder { color: rgba(255,255,255,0.4); }
+
+        .search-btn {
+            border: none;
+            background: var(--accent);
+            color: #000;
+            padding: 0 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: 0.2s;
+        }
+
+        .search-btn:hover { box-shadow: 0 0 15px var(--accent-glow); }
+
+        .search-status {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        .search-results {
+            margin-top: 10px;
+            max-height: 220px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .search-results::-webkit-scrollbar { width: 3px; }
+        .search-results::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+        .search-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.04);
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .search-item:hover { background: rgba(255,255,255,0.08); }
+
+        .search-cover {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            object-fit: cover;
+        }
+
+        .search-info { flex: 1; }
+        .search-title { font-size: 0.85rem; color: #fff; }
+        .search-artist { font-size: 0.7rem; color: var(--text-dim); }
+
+        .search-add {
+            border: none;
+            background: rgba(255,255,255,0.08);
+            color: #fff;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .search-add:hover { background: var(--accent); color: #000; }
 
         /* Визуал */
         .visual-container { width: 260px; height: 260px; margin-bottom: 40px; display: flex; align-items: center; justify-content: center; position: relative; }
@@ -196,6 +289,17 @@
         .track-delete-btn:hover { background: rgba(255,0,0,0.2); color: #ff4444; }
         .t-name-mini { font-size: 0.85rem; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; transition: color 0.3s ease; }
         .track-item.active .t-name-mini { color: var(--accent); }
+        .t-artist-mini { font-size: 0.7rem; color: rgba(255,255,255,0.4); }
+        .track-text { flex: 1; display: flex; flex-direction: column; }
+        .source-pill {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #000;
+            background: var(--accent);
+            border-radius: 999px;
+            padding: 2px 8px;
+        }
 
         .drag-msg { position: absolute; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 50; opacity: 0; pointer-events: none; transition: 0.3s; border-radius: 40px; }
         .drag-active .drag-msg { opacity: 1; pointer-events: all; }
@@ -261,6 +365,14 @@
         </div>
 
         <div class="playlist-panel">
+            <div class="search-panel">
+                <form class="search-form" id="searchForm">
+                    <input type="text" id="searchInput" class="search-input" placeholder="Найти музыку в iTunes" autocomplete="off">
+                    <button class="search-btn" type="submit"><i class="fas fa-search"></i></button>
+                </form>
+                <div class="search-status" id="searchStatus">Поиск по iTunes доступен</div>
+                <div class="search-results" id="searchResults"></div>
+            </div>
             <div class="playlist-header">Очередь (<span id="count">0</span>)</div>
             <div class="playlist-scroll" id="playlistBox"></div>
         </div>
@@ -345,6 +457,7 @@
         const fileInput = document.getElementById('file-input');
         const appContainer = document.getElementById('appContainer');
         const playlistBox = document.getElementById('playlistBox');
+        const playlistCount = document.getElementById('count');
 
         const art = document.getElementById('art');
         const titleEl = document.getElementById('title');
@@ -353,12 +466,37 @@
         const fill = document.getElementById('fill');
         const aura = document.getElementById('aura');
 
+        const searchForm = document.getElementById('searchForm');
+        const searchInput = document.getElementById('searchInput');
+        const searchStatus = document.getElementById('searchStatus');
+        const searchResultsBox = document.getElementById('searchResults');
+
+        const bridgeAPI = window.electronAPI || {};
+        const supportsItunesSearch = typeof bridgeAPI.searchITunes === 'function';
+        const DEFAULT_ART = 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop';
+
         let playlist = [];
         let currentIdx = 0;
         let isPlaying = false;
         let audioCtx, analyser, dataArray;
         let setupDone = false;
         let animationId;
+
+        if (!supportsItunesSearch && searchStatus) {
+            searchStatus.innerText = 'Поиск iTunes недоступен в этой сборке';
+        }
+
+        if (searchForm) {
+            searchForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const query = searchInput.value.trim();
+                if (!query) {
+                    searchStatus.innerText = 'Введите запрос для поиска';
+                    return;
+                }
+                performItunesSearch(query);
+            });
+        }
 
         window.addEventListener('dragover', e => { e.preventDefault(); document.querySelector('.drag-msg').parentNode.parentNode.classList.add('drag-active'); document.querySelector('.drag-msg').style.opacity = '1'; });
         window.addEventListener('dragleave', e => { if(!e.relatedTarget || !appContainer.contains(e.relatedTarget)) { document.querySelector('.drag-msg').style.opacity = '0'; }});
@@ -369,34 +507,164 @@
 
         fileInput.addEventListener('change', e => handleFiles(e.target.files));
 
+        async function performItunesSearch(query) {
+            if (!supportsItunesSearch) {
+                searchStatus.innerText = 'Поиск iTunes недоступен';
+                return;
+            }
+            searchStatus.innerText = 'Поиск в iTunes...';
+            searchResultsBox.innerHTML = '';
+            try {
+                const result = await bridgeAPI.searchITunes(query);
+                if (!result || !result.success) {
+                    searchStatus.innerText = result?.error || 'Ошибка поиска';
+                    return;
+                }
+                renderSearchResults(result.tracks || []);
+            } catch (err) {
+                console.error('iTunes search failed', err);
+                searchStatus.innerText = 'Ошибка соединения';
+            }
+        }
+
+        function renderSearchResults(tracks) {
+            searchResultsBox.innerHTML = '';
+            if (!tracks.length) {
+                searchStatus.innerText = 'Ничего не найдено';
+                return;
+            }
+
+            const playable = tracks.filter(track => track.previewUrl);
+            if (!playable.length) {
+                searchStatus.innerText = 'Ничего не найдено для прослушивания';
+                return;
+            }
+
+            searchStatus.innerText = `Найдено треков: ${playable.length}`;
+            playable.forEach(track => {
+                const item = document.createElement('div');
+                item.className = 'search-item';
+
+                const cover = document.createElement('img');
+                cover.className = 'search-cover';
+                cover.src = (track.artworkUrl100 || DEFAULT_ART).replace('100x100', '200x200');
+
+                const info = document.createElement('div');
+                info.className = 'search-info';
+
+                const title = document.createElement('div');
+                title.className = 'search-title';
+                title.textContent = track.trackName || 'Без названия';
+
+                const artist = document.createElement('div');
+                artist.className = 'search-artist';
+                artist.textContent = track.artistName || 'Неизвестный исполнитель';
+
+                info.appendChild(title);
+                info.appendChild(artist);
+
+                const addBtn = document.createElement('button');
+                addBtn.className = 'search-add';
+                addBtn.type = 'button';
+                addBtn.innerText = 'Добавить';
+                addBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    addItunesTrack(track);
+                });
+
+                item.addEventListener('click', () => addItunesTrack(track));
+
+                item.appendChild(cover);
+                item.appendChild(info);
+                item.appendChild(addBtn);
+
+                searchResultsBox.appendChild(item);
+            });
+        }
+
+        function addItunesTrack(track) {
+            if (!track || !track.previewUrl) return;
+            const id = `itunes-${track.trackId || Math.random().toString(36).substr(2, 9)}`;
+            playlist.push({
+                id,
+                type: 'itunes',
+                source: 'iTunes',
+                name: track.trackName || 'Без названия',
+                artist: track.artistName || 'Неизвестный исполнитель',
+                src: track.previewUrl,
+                artwork: track.artworkUrl100 ? track.artworkUrl100.replace('100x100', '600x600') : DEFAULT_ART
+            });
+            renderPlaylist();
+            if (playlist.length === 1) {
+                loadTrack(0);
+            }
+            appContainer.classList.add('playlist-open');
+        }
+
+        function createLocalArtwork(seed) {
+            return `https://source.unsplash.com/random/600x600/?space,neon,blue&sig=${seed}`;
+        }
+
         function handleFiles(files) {
             let newTracks = Array.from(files).filter(f => f.type.startsWith('audio'));
             if(newTracks.length === 0) return;
             newTracks.forEach(file => {
+                const id = `local-${Math.random().toString(36).substr(2, 9)}`;
                 playlist.push({
                     name: file.name.replace(/\.[^/.]+$/, ""),
                     src: URL.createObjectURL(file),
-                    id: Math.random().toString(36).substr(2, 9)
+                    id,
+                    type: 'local',
+                    source: 'Local',
+                    artist: 'Local Audio',
+                    artwork: createLocalArtwork(id)
                 });
             });
             renderPlaylist();
             if(playlist.length === newTracks.length) loadTrack(0);
-            if(playlist.length > 1) appContainer.classList.add('playlist-open');
+            if(playlist.length > 0) appContainer.classList.add('playlist-open');
         }
 
         function renderPlaylist() {
             playlistBox.innerHTML = '';
-            document.getElementById('count').innerText = playlist.length;
+            playlistCount.innerText = playlist.length;
             playlist.forEach((track, idx) => {
-                let div = document.createElement('div');
+                const div = document.createElement('div');
                 div.className = `track-item ${idx === currentIdx ? 'active' : ''}`;
-                div.innerHTML = `
-                    <button class="track-delete-btn" onclick="event.stopPropagation(); removeTrack(${idx})">
-                        <i class="fas fa-times"></i>
-                    </button>
-                    <div class="t-name-mini">${track.name}</div>
-                `;
-                div.onclick = () => loadTrack(idx);
+                div.addEventListener('click', () => loadTrack(idx));
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'track-delete-btn';
+                deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
+                deleteBtn.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    removeTrack(idx);
+                });
+
+                const textWrapper = document.createElement('div');
+                textWrapper.className = 'track-text';
+
+                const nameEl = document.createElement('div');
+                nameEl.className = 't-name-mini';
+                nameEl.textContent = track.name;
+
+                const artistElMini = document.createElement('div');
+                artistElMini.className = 't-artist-mini';
+                artistElMini.textContent = track.artist || '';
+
+                textWrapper.appendChild(nameEl);
+                textWrapper.appendChild(artistElMini);
+
+                div.appendChild(deleteBtn);
+                div.appendChild(textWrapper);
+
+                if (track.source) {
+                    const sourcePill = document.createElement('span');
+                    sourcePill.className = 'source-pill';
+                    sourcePill.textContent = track.source;
+                    div.appendChild(sourcePill);
+                }
+
                 playlistBox.appendChild(div);
             });
         }
@@ -414,7 +682,7 @@
                     isPlaying = false;
                     titleEl.innerText = 'Aether System';
                     artistEl.innerText = 'System Online';
-                    art.src = 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop';
+                    art.src = DEFAULT_ART;
                     playBtn.innerHTML = '<i class="fas fa-play" style="margin-left: 4px;"></i>';
                     currentIdx = 0;
                 } else {
@@ -431,16 +699,18 @@
         }
 
         function loadTrack(idx) {
+            if (!playlist[idx]) return;
             art.classList.add('fade-transition');
             titleEl.style.opacity = '0';
             artistEl.style.opacity = '0';
 
             setTimeout(() => {
                 currentIdx = idx;
-                audio.src = playlist[idx].src;
-                titleEl.innerText = playlist[idx].name;
-                artistEl.innerText = "Local Audio";
-                art.src = `https://source.unsplash.com/random/600x600/?space,neon,blue,${playlist[idx].id}`;
+                const track = playlist[idx];
+                audio.src = track.src;
+                titleEl.innerText = track.name || 'Без названия';
+                artistEl.innerText = track.artist || 'Неизвестный исполнитель';
+                art.src = track.artwork || DEFAULT_ART;
 
                 art.onload = () => { art.classList.remove('fade-transition'); };
                 setTimeout(() => art.classList.remove('fade-transition'), 200);

@@ -21,6 +21,8 @@ const INVIDIOUS_INSTANCES = [
     'https://inv.us.projectsegfau.lt'
 ];
 
+const ITUNES_ENDPOINT = 'https://itunes.apple.com/search';
+
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1200,
@@ -66,6 +68,41 @@ app.on('activate', () => {
 });
 
 // IPC Handlers для YouTube поиска
+
+ipcMain.handle('search-itunes', async (event, query) => {
+    if (!query || typeof query !== 'string') {
+        return {
+            success: false,
+            error: 'Пустой запрос'
+        };
+    }
+
+    try {
+        const response = await axios.get(ITUNES_ENDPOINT, {
+            params: {
+                term: query,
+                media: 'music',
+                limit: 15
+            },
+            timeout: 10000
+        });
+
+        const tracks = Array.isArray(response.data?.results)
+            ? response.data.results.filter(track => track.previewUrl)
+            : [];
+
+        return {
+            success: true,
+            tracks
+        };
+    } catch (error) {
+        console.error('iTunes search failed:', error.message);
+        return {
+            success: false,
+            error: 'Не удалось выполнить поиск через iTunes'
+        };
+    }
+});
 
 // Поиск видео на YouTube через Invidious
 ipcMain.handle('search-youtube', async (event, query) => {
